@@ -11,7 +11,6 @@
 		0480E1921F641CA600F0E82F /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0480E1911F641CA600F0E82F /* OpenGL.framework */; };
 		0480E1941F641E0E00F0E82F /* libglfw.3.2.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0480E1931F641E0E00F0E82F /* libglfw.3.2.dylib */; };
 		0480E1961F641F3300F0E82F /* glad.c in Sources */ = {isa = PBXBuildFile; fileRef = 0480E1951F641F3300F0E82F /* glad.c */; };
-		0480E19A1F64225900F0E82F /* libGLEW.2.1.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0480E1991F64225900F0E82F /* libGLEW.2.1.0.dylib */; };
 		04AAED4F1F9C541B00B80E1D /* GLUT.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 04AAED4E1F9C541100B80E1D /* GLUT.framework */; };
 		04B732AB1F68FBD7004DAAA9 /* stb_image.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 04B732A91F68FBD7004DAAA9 /* stb_image.cpp */; };
 /* End PBXBuildFile section */
@@ -55,7 +54,6 @@
 			files = (
 				04AAED4F1F9C541B00B80E1D /* GLUT.framework in Frameworks */,
 				0480E1921F641CA600F0E82F /* OpenGL.framework in Frameworks */,
-				0480E19A1F64225900F0E82F /* libGLEW.2.1.0.dylib in Frameworks */,
 				0480E1941F641E0E00F0E82F /* libglfw.3.2.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -141,7 +139,6 @@
 				TargetAttributes = {
 					0480E1851F641C0D00F0E82F = {
 						CreatedOnToolsVersion = 8.3.3;
-						DevelopmentTeam = H58HL5XJZ7;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -269,7 +266,7 @@
 		0480E18E1F641C0D00F0E82F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				DEVELOPMENT_TEAM = H58HL5XJZ7;
+				DEVELOPMENT_TEAM = "";
 				HEADER_SEARCH_PATHS = (
 					/usr/local/include,
 					/usr/local/include/GLFW,
@@ -286,7 +283,7 @@
 		0480E18F1F641C0D00F0E82F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				DEVELOPMENT_TEAM = H58HL5XJZ7;
+				DEVELOPMENT_TEAM = "";
 				HEADER_SEARCH_PATHS = (
 					/usr/local/include,
 					/usr/local/include/GLFW,

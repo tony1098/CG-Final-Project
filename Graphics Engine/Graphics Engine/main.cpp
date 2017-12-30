@@ -6,6 +6,7 @@
 #include "camera.h"
 #include "shader.h"
 #include "stb_image.h"
+#include "model.h"
 
 // include glm
 #include <glm/glm.hpp>
@@ -20,7 +21,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow *window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void renderScene(Shader wallShader, unsigned int wallVAO, float clipPlane[4]);
+void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float clipPlane[4]);
 unsigned int initializeReflectionFBO();
 unsigned int initializeRefractionFBO();
 
@@ -38,12 +39,18 @@ bool firstMouse = true;
 float deltaTime = 0.0f;    // time between current frame and last frame
 float lastFrame = 0.0f;
 
+// Global var for convenience
 unsigned int reflectionColorBuffer;
 unsigned int refractionColorBuffer;
 
 float reflect_plane[4] = { 0, 1, 0, 0 };
 float refract_plane[4] = { 0, -1, 0, 0 };
 float plane[4] = { 0, -1, 0, 100000 };
+
+unsigned int wallVAO, floorVAO;
+unsigned int texture1, texture2;
+
+
 
 int main()
 {
@@ -87,11 +94,17 @@ int main()
     
     // ------------------ shaders ------------------
     
-    Shader wallShader("./wallShader.vs", "./wallShader.frag");
-    
     Shader waterShader("./water.vs", "./water.frag");
     
+    Shader wallShader("./wallShader.vs", "./wallShader.frag");
+    
     Shader screenShader("./screenShader.vs", "./screenShader.frag");
+    
+    Shader modelShader("./model_loading.vs", "./model_loading.frag");
+    
+    // ----------------- load models ----------------
+    
+    Model ourModel(string("../models/nanosuit/nanosuit.obj"));
     
     // ----------------- data processing ----------------
     
@@ -105,15 +118,8 @@ int main()
         -2, -5 // top left
     };
 
-    float wall[] = { // RENDER WITH GL_QUADS
+    float wall[] = { 
         // position texture
-        -2, -2, -5,  0, 1,
-        -2, -2, 5,   0, 0,
-        2, -2, 5,    1, 0,
-        2, -2, 5,    1, 0,
-        2, -2, -5,   1, 1,
-        -2, -2, -5,  0, 1,
-        
         -2, 2, -5,   0, 1,
         -2, -2, -5,  0, 0,
         2, -2, -5,   1, 0,
@@ -143,6 +149,15 @@ int main()
         2, 2, -5,    0, 1
     };
     
+    float floor[] = {
+        -2, -2, -5,  0, 1,
+        -2, -2, 5,   0, 0,
+        2, -2, 5,    1, 0,
+        2, -2, 5,    1, 0,
+        2, -2, -5,   1, 1,
+        -2, -2, -5,  0, 1,
+    };
+    
     float quadVertices[] = { // for rendering to screen space
         // positions   // texCoords
         -1.0f,  1.0f,  0.0f, 1.0f,
@@ -154,11 +169,13 @@ int main()
         1.0f,  1.0f,  1.0f, 1.0f
     };
     
-    unsigned int waterVBO, waterVAO, wallVBO, wallVAO;
+    unsigned int waterVBO, waterVAO, wallVBO, floorVBO; // NOTE: wallVAO is declared as global var for convenience
     glGenVertexArrays(1, &waterVAO);
     glGenBuffers(1, &waterVBO);
     glGenVertexArrays(1, &wallVAO);
     glGenBuffers(1, &wallVBO);
+    glGenVertexArrays(1, &floorVAO);
+    glGenBuffers(1, &floorVBO);
     
     // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
     glBindVertexArray(waterVAO);
@@ -171,6 +188,16 @@ int main()
     glBindVertexArray(wallVAO);
     glBindBuffer(GL_ARRAY_BUFFER, wallVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(wall), wall, GL_STATIC_DRAW);
+    // position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // texture coord attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    
+    glBindVertexArray(floorVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, floorVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(floor), floor, GL_STATIC_DRAW);
     // position attribute
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -193,8 +220,6 @@ int main()
     
     // -------------- textures ---------------------
     
-    unsigned int texture1;
-    
     // texture 1
     glGenTextures(1, &texture1);
     glBindTexture(GL_TEXTURE_2D, texture1);
@@ -215,7 +240,30 @@ int main()
     }
     else
     {
-        std::cout << "Failed to load texture" << std::endl;
+        std::cout << "Failed to load texture1" << std::endl;
+    }
+    stbi_image_free(data);
+    
+    // texture 2
+    glGenTextures(1, &texture2);
+    glBindTexture(GL_TEXTURE_2D, texture2);
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);    // set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // load image, create texture and generate mipmaps
+    stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
+    data = stbi_load("../textures/bamboo.jpg", &width, &height, &nrChannels, 0);
+    if (data)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else
+    {
+        std::cout << "Failed to load texture2" << std::endl;
     }
     stbi_image_free(data);
     
@@ -250,8 +298,6 @@ int main()
         
         // ------------------ 1st pass ---------------
         
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture1);
         glEnable(GL_DEPTH_TEST); // enable depth testing (is disabled for rendering screen-space quad)
         
         // render reflection texture
@@ -259,22 +305,28 @@ int main()
         float distance = 2 * ( camera.Position.y - 0 );
         camera.Position.y -= distance;
         camera.Pitch = -camera.Pitch; // invert camera pitch
-        renderScene(wallShader, wallVAO, reflect_plane);
+        renderScene(wallShader, modelShader, ourModel, reflect_plane);
         // reset camera back to original position
         camera.Position.y += distance;
         camera.Pitch = -camera.Pitch;
         
         // render refraction texture
         glBindFramebuffer(GL_FRAMEBUFFER, refractionFBO);
-        renderScene(wallShader, wallVAO, refract_plane);
+        renderScene(wallShader, modelShader, ourModel, refract_plane);
         
         
         // render to screen
         glDisable(GL_CLIP_DISTANCE0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0); // now bind back to default framebuffer
-        renderScene(wallShader, wallVAO, plane);
+        renderScene(wallShader, modelShader, ourModel, plane);
         // render water
         waterShader.use();
+        waterShader.setInt("reflectionTexture", 0);
+        waterShader.setInt("refractionTexture", 1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, reflectionColorBuffer);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, refractionColorBuffer);
         glBindVertexArray(waterVAO);
         // do transformations
         glm::mat4 projection;
@@ -289,6 +341,7 @@ int main()
         
         
         // ------------------ 2nd pass ---------------
+        
         /*
         // draw a quad plane with the attached framebuffer color texture
         glBindFramebuffer(GL_FRAMEBUFFER, 0); // now bind back to default framebuffer
@@ -298,8 +351,8 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT);
         screenShader.use();
         glBindVertexArray(quadVAO);
-        // glBindTexture(GL_TEXTURE_2D, reflectionColorBuffer);
         glBindTexture(GL_TEXTURE_2D, reflectionColorBuffer);
+        // glBindTexture(GL_TEXTURE_2D, refractionColorBuffer);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         */
         
@@ -378,10 +431,13 @@ unsigned int initializeRefractionFBO()
 }
 
 // draw everything aside from water
-void renderScene(Shader wallShader, unsigned int wallVAO, float clipPlane[4])
+void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float clipPlane[4])
 {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture1); // marble texture
     
     wallShader.use();
     // pass clip plane
@@ -394,12 +450,30 @@ void renderScene(Shader wallShader, unsigned int wallVAO, float clipPlane[4])
     // camera/view transformation
     glm::mat4 view = camera.GetViewMatrix();
     wallShader.setMat4("view", view);
-    
     glBindVertexArray(wallVAO);
-    
     glm::mat4 model= glm::mat4(1.0f);
     wallShader.setMat4("model", model);
-    glDrawArrays(GL_TRIANGLES, 0, 30);
+    glDrawArrays(GL_TRIANGLES, 0, 24);
+    
+    // draw floor
+    glBindVertexArray(floorVAO);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture2); // floor texture
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    
+    // draw model
+    modelShader.use();
+    model = glm::mat4(1.0f); // load identity matrix
+    model = glm::translate(model, glm::vec3(0.0f, -1.5f, 0.0f));
+    model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));    // it's a bit too big for our scene, so scale it down
+    modelShader.setMat4("model", model);
+    modelShader.setMat4("projection", projection);
+    modelShader.setMat4("view", view);
+    // pass clip plane
+    plane_location = glGetUniformLocation(modelShader.ID, "plane");
+    glUniform4fv(plane_location, 1, clipPlane);
+    ourModel.Draw(modelShader);
+    
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly

@@ -91,8 +91,8 @@ public:
     // Processes input received from a mouse input system. Expects the offset value in both the x and y direction.
     void ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch = true)
     {
-        xoffset *= MouseSensitivity;
-        yoffset *= MouseSensitivity;
+        xoffset *= 5 * MouseSensitivity;
+        yoffset *= 5 * MouseSensitivity;
         
         Yaw   += xoffset;
         Pitch += yoffset;
@@ -119,6 +119,12 @@ public:
             Zoom = 1.0f;
         if (Zoom >= 45.0f)
             Zoom = 45.0f;
+    }
+    
+    void invertPitch()
+    {
+        Pitch = -Pitch;
+        updateCameraVectors();
     }
     
 private:

@@ -88,7 +88,7 @@ int main()
     }
     
     // ------- configure global opengl state -------
-    // glEnable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
     
     glEnable(GL_CLIP_DISTANCE0);
     
@@ -160,6 +160,7 @@ int main()
     
     float quadVertices[] = { // for rendering to screen space
         // positions   // texCoords
+        /*
         -1.0f,  1.0f,  0.0f, 1.0f,
         -1.0f, -1.0f,  0.0f, 0.0f,
         1.0f, -1.0f,  1.0f, 0.0f,
@@ -167,6 +168,15 @@ int main()
         -1.0f,  1.0f,  0.0f, 1.0f,
         1.0f, -1.0f,  1.0f, 0.0f,
         1.0f,  1.0f,  1.0f, 1.0f
+         */
+        -1.0f,  1.0f,  0.0f, 0.0f,
+        -1.0f, -1.0f,  0.0f, 1.0f,
+        1.0f, -1.0f,  1.0f, 1.0f,
+        
+        -1.0f,  1.0f,  0.0f, 0.0f,
+        1.0f, -1.0f,  1.0f, 1.0f,
+        1.0f,  1.0f,  1.0f, 0.0f
+          
     };
     
     unsigned int waterVBO, waterVAO, wallVBO, floorVBO; // NOTE: wallVAO is declared as global var for convenience
@@ -288,6 +298,8 @@ int main()
     // --------------- render loop ------------------------
     while (!glfwWindowShouldClose(window))
     {
+        glEnable(GL_CLIP_DISTANCE0); // enable clip distance
+        
         // timing
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
@@ -304,11 +316,11 @@ int main()
         glBindFramebuffer(GL_FRAMEBUFFER, reflectionFBO);
         float distance = 2 * ( camera.Position.y - 0 );
         camera.Position.y -= distance;
-        camera.Pitch = -camera.Pitch; // invert camera pitch
+        camera.invertPitch(); // invert camera pitch
         renderScene(wallShader, modelShader, ourModel, reflect_plane);
         // reset camera back to original position
         camera.Position.y += distance;
-        camera.Pitch = -camera.Pitch;
+        camera.invertPitch(); // invert back camera pitch
         
         // render refraction texture
         glBindFramebuffer(GL_FRAMEBUFFER, refractionFBO);
@@ -339,6 +351,7 @@ int main()
         waterShader.setMat4("model", model);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         
+        // std::cout << camera.Position.y << "\n";
         
         // ------------------ 2nd pass ---------------
         
@@ -381,13 +394,14 @@ unsigned int initializeReflectionFBO()
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     // create a color attachment texture
-    unsigned int depthRenderBuffer;
+    unsigned int depthRenderBuffer, depthBuffer;
     glGenTextures(1, &reflectionColorBuffer);
     glBindTexture(GL_TEXTURE_2D, reflectionColorBuffer);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, reflectionColorBuffer, 0);
+    
     // create a depth render buffer attachment
     glGenRenderbuffers(1, &depthRenderBuffer);
     glBindRenderbuffer(GL_RENDERBUFFER, depthRenderBuffer);
@@ -397,7 +411,7 @@ unsigned int initializeReflectionFBO()
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "ERROR::FRAMEBUFFER:: Reflection framebuffer is not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    
+
     return fbo;
 }
 
@@ -454,7 +468,6 @@ void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float cl
     glm::mat4 model= glm::mat4(1.0f);
     wallShader.setMat4("model", model);
     glDrawArrays(GL_TRIANGLES, 0, 24);
-    
     // draw floor
     glBindVertexArray(floorVAO);
     glActiveTexture(GL_TEXTURE0);
@@ -462,18 +475,19 @@ void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float cl
     glDrawArrays(GL_TRIANGLES, 0, 6);
     
     // draw model
+    
     modelShader.use();
     model = glm::mat4(1.0f); // load identity matrix
-    model = glm::translate(model, glm::vec3(0.0f, -1.5f, 0.0f));
+    model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
     model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));    // it's a bit too big for our scene, so scale it down
     modelShader.setMat4("model", model);
     modelShader.setMat4("projection", projection);
     modelShader.setMat4("view", view);
-    // pass clip plane
+    // pass clip plane to model shader`
     plane_location = glGetUniformLocation(modelShader.ID, "plane");
     glUniform4fv(plane_location, 1, clipPlane);
     ourModel.Draw(modelShader);
-    
+     
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly

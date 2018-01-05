@@ -21,7 +21,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow *window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float clipPlane[4]);
+void renderScene(Shader wallShader, Shader modelShader, Model zenigame, Model teemo, Model duck, float clipPlane[4]);
 unsigned int initializeReflectionFBO();
 unsigned int initializeRefractionFBO();
 
@@ -52,8 +52,14 @@ unsigned int texture1, texture2;
 
 unsigned int DuDvTexture;
 
+unsigned int normalTexture;
+
 float wave_speed = 0.03f;
 float moveFactor = 0;
+
+// lighting
+glm::vec3 lightPos(0, 3, 0);
+glm::vec3 light_Color(1, 1, 1);
 
 int main()
 {
@@ -107,7 +113,11 @@ int main()
     
     // ----------------- load models ----------------
     
-    Model ourModel(string("../models/nanosuit/nanosuit.obj"));
+    Model zenigame(string("../models/teemo/zenigame.obj"));
+    
+    Model teemo(string("../models/teemo/teemo.obj"));
+    
+    Model duck(string("../models/teemo/duck.obj"));
     
     // ----------------- data processing ----------------
     
@@ -299,7 +309,7 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // load image, create texture and generate mipmaps
     stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
-    data = stbi_load("../textures/waterDUDV1.png", &width, &height, &nrChannels, 0);
+    data = stbi_load("../textures/waterDUDV.png", &width, &height, &nrChannels, 0);
     if (data)
     {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
@@ -310,6 +320,31 @@ int main()
         std::cout << "Failed to load DuDv texture" << std::endl;
     }
     stbi_image_free(data);
+    
+    // load normal texture
+    glGenTextures(1, &normalTexture);
+    glBindTexture(GL_TEXTURE_2D, normalTexture);
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);    // set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // load image, create texture and generate mipmaps
+    stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
+    data = stbi_load("../textures/normalMap.png", &width, &height, &nrChannels, 0);
+    // data = stbi_load("../textures/matchingNormalMap.png", &width, &height, &nrChannels, 0);
+    if (data)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else
+    {
+        std::cout << "Failed to load normal texture" << std::endl;
+    }
+    stbi_image_free(data);
+
     
     // ------------ shader configuration ---------------
     
@@ -351,25 +386,37 @@ int main()
         float distance = 2 * ( camera.Position.y - 0 );
         camera.Position.y -= distance;
         camera.invertPitch(); // invert camera pitch
-        renderScene(wallShader, modelShader, ourModel, reflect_plane);
+        renderScene(wallShader, modelShader, zenigame, teemo, duck, reflect_plane);
         // reset camera back to original position
         camera.Position.y += distance;
         camera.invertPitch(); // invert back camera pitch
         
         // render refraction texture
         glBindFramebuffer(GL_FRAMEBUFFER, refractionFBO);
-        renderScene(wallShader, modelShader, ourModel, refract_plane);
-        
+        renderScene(wallShader, modelShader, zenigame, teemo, duck, refract_plane);
+
         
         // render to screen
         glDisable(GL_CLIP_DISTANCE0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0); // now bind back to default framebuffer
-        renderScene(wallShader, modelShader, ourModel, plane);
+        renderScene(wallShader, modelShader, zenigame, teemo, duck, plane);
         // render water
         waterShader.use();
         waterShader.setInt("reflectionTexture", 0);
         waterShader.setInt("refractionTexture", 1);
         waterShader.setInt("dudvMap", 2);
+        waterShader.setInt("normalMap", 3);
+        
+        // pass camera position
+        glm::vec3 cameraPos = camera.Position;
+        GLuint cameraPosition_loc = glGetUniformLocation(waterShader.ID, "cameraPosition");
+        glUniform3fv(cameraPosition_loc, 1, glm::value_ptr(cameraPos));
+        // pass light position
+        GLuint lightPosition_loc = glGetUniformLocation(waterShader.ID, "lightPosition");
+        glUniform3fv(lightPosition_loc, 1, glm::value_ptr(lightPos));
+        // pass light color
+        GLuint lightColor_loc = glGetUniformLocation(waterShader.ID, "lightColor");
+        glUniform3fv(lightColor_loc, 1, glm::value_ptr(light_Color));
         
         // wave
         moveFactor += wave_speed * currentFrame * 0.001; 
@@ -383,6 +430,8 @@ int main()
         glBindTexture(GL_TEXTURE_2D, refractionColorBuffer);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, DuDvTexture);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, normalTexture);
         glBindVertexArray(waterVAO);
         // do transformations
         glm::mat4 projection;
@@ -490,7 +539,7 @@ unsigned int initializeRefractionFBO()
 }
 
 // draw everything aside from water
-void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float clipPlane[4])
+void renderScene(Shader wallShader, Shader modelShader, Model zenigame, Model teemo, Model duck, float clipPlane[4])
 {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -520,10 +569,11 @@ void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float cl
     glDrawArrays(GL_TRIANGLES, 0, 6);
     
     // draw model
-    /*
+    
+    // zenigame
     modelShader.use();
     model = glm::mat4(1.0f); // load identity matrix
-    model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
+    model = glm::translate(model, glm::vec3(0.4f, -1.0f, -2.5f));
     model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));    // it's a bit too big for our scene, so scale it down
     modelShader.setMat4("model", model);
     modelShader.setMat4("projection", projection);
@@ -531,8 +581,26 @@ void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float cl
     // pass clip plane to model shader`
     plane_location = glGetUniformLocation(modelShader.ID, "plane");
     glUniform4fv(plane_location, 1, clipPlane);
-    ourModel.Draw(modelShader);
-     */
+    zenigame.Draw(modelShader);
+    
+    // teemo
+    model = glm::mat4(1.0f); // load identity matrix
+    model = glm::translate(model, glm::vec3(0.0f, 0.2f, 0.2f));
+    model = glm::scale(model, glm::vec3(0.005f, 0.005f, 0.005f));    // it's a bit too big for our scene, so scale it down
+    modelShader.setMat4("model", model);
+    modelShader.setMat4("projection", projection);
+    modelShader.setMat4("view", view);
+    teemo.Draw(modelShader); // teemo
+    
+    // duck
+    model = glm::mat4(1.0f); // load identity matrix
+    model = glm::translate(model, glm::vec3(-0.3f, 0.1f, 3.0f));
+    model = glm::scale(model, glm::vec3(0.0002f, 0.0002f, 0.0002f));    // it's a bit too big for our scene, so scale it down
+    model = glm::rotate(model, (float)glfwGetTime(), glm::vec3(0.0f, 1.0f, 0.0f));
+    modelShader.setMat4("model", model);
+    modelShader.setMat4("projection", projection);
+    modelShader.setMat4("view", view);
+    duck.Draw(modelShader);
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly

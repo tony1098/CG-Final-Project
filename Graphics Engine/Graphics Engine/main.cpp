@@ -50,7 +50,10 @@ float plane[4] = { 0, -1, 0, 100000 };
 unsigned int wallVAO, floorVAO;
 unsigned int texture1, texture2;
 
+unsigned int DuDvTexture;
 
+float wave_speed = 0.03f;
+float moveFactor = 0;
 
 int main()
 {
@@ -110,12 +113,20 @@ int main()
     
     // vertex data
     float water[] = { // all y set to 0
+        /*
         -2, 5, // botton left
         2, 5, // bottom right
         2, -5, // top right
         -2, 5, // botton left
         2, -5, // top right
         -2, -5 // top left
+         */
+        -1, 1,
+        1, 1,
+        1, -1,
+        -1, 1,
+        1, -1,
+        -1, -1
     };
 
     float wall[] = { 
@@ -277,6 +288,29 @@ int main()
     }
     stbi_image_free(data);
     
+    // load DuDv texture
+    glGenTextures(1, &DuDvTexture);
+    glBindTexture(GL_TEXTURE_2D, DuDvTexture);
+    // set the texture wrapping parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);    // set texture wrapping to GL_REPEAT (default wrapping method)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    // set texture filtering parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // load image, create texture and generate mipmaps
+    stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis.
+    data = stbi_load("../textures/waterDUDV1.png", &width, &height, &nrChannels, 0);
+    if (data)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else
+    {
+        std::cout << "Failed to load DuDv texture" << std::endl;
+    }
+    stbi_image_free(data);
+    
     // ------------ shader configuration ---------------
     
     wallShader.use();
@@ -335,10 +369,20 @@ int main()
         waterShader.use();
         waterShader.setInt("reflectionTexture", 0);
         waterShader.setInt("refractionTexture", 1);
+        waterShader.setInt("dudvMap", 2);
+        
+        // wave
+        moveFactor += wave_speed * currentFrame * 0.001; 
+        if (moveFactor >= 1)
+            moveFactor -= 1;
+        waterShader.setFloat("moveFactor", moveFactor);
+        
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, reflectionColorBuffer);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, refractionColorBuffer);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, DuDvTexture);
         glBindVertexArray(waterVAO);
         // do transformations
         glm::mat4 projection;
@@ -348,6 +392,7 @@ int main()
         glm::mat4 view = camera.GetViewMatrix();
         waterShader.setMat4("view", view);
         glm::mat4 model= glm::mat4(1.0f);
+        model = glm::scale(model, glm::vec3(2.0, 1.0, 5.0));
         waterShader.setMat4("model", model);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         
@@ -475,7 +520,7 @@ void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float cl
     glDrawArrays(GL_TRIANGLES, 0, 6);
     
     // draw model
-    
+    /*
     modelShader.use();
     model = glm::mat4(1.0f); // load identity matrix
     model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
@@ -487,7 +532,7 @@ void renderScene(Shader wallShader, Shader modelShader, Model ourModel, float cl
     plane_location = glGetUniformLocation(modelShader.ID, "plane");
     glUniform4fv(plane_location, 1, clipPlane);
     ourModel.Draw(modelShader);
-     
+     */
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly

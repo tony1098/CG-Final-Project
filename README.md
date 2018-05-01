@@ -1,1 +1,1 @@
-# CG-Final-Project
+# Water simulation with OpenGL
